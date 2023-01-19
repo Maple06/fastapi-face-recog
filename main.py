@@ -47,7 +47,7 @@ def api(l: str = ""):
     picLink = l
 
     if picLink == None or picLink == "":
-        return "<h2>No link argument found</h2>"
+        return {"faceDetected": "No Face Detected", "confidence": "0%", "match-status": False, "error-status": 0, "error-message": "No link argument found"}
     response = requests.get(picLink, stream=True)
     timeNow = strftime("%d-%b-%y.%H-%M-%S", gmtime())
     filename = f"static/images/api-{timeNow}.png"
@@ -59,7 +59,7 @@ def api(l: str = ""):
 
     try:
         if filename == None:
-            return "<h2>Not a valid file name</h2>"
+            return {"faceDetected": "No Face Detected", "confidence": "0%", "match-status": False, "error-status": 0, "error-message": "Not a valid filename"}
     except ValueError:
         pass
 
@@ -130,3 +130,52 @@ def api(l: str = ""):
     confidence = status["confidence"]
 
     return {"faceDetected": faceDetected, "confidence": confidence, "match-status": status["match-status"], "error-status": 1}
+
+@app.route("/update")
+def update():
+    r = requests.get('https://web.waktoo.com/open-api/get-selfie', headers={'Accept': 'application/json'})
+
+    response = r.json()
+    idPerusahaan = 1 # PT Kazee Digital Indonesia
+    response = response["data"][idPerusahaan-1]["user"]
+
+    for i in response:
+        count = 1
+        try:
+            for j in i["foto"]:
+                url = j["foto_absen"]
+
+                r = requests.get(url)
+
+                filename = f'static/faces/{i["user_id"]}.png'
+
+                with open(filename, 'wb') as f:
+                    f.write(r.content)         
+                try :
+                    img = cv2.imread(filename)
+                    # Convert into grayscale
+                    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                    
+                    # Load the cascade
+                    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+                    
+                    # Detect faces
+                    faces = face_cascade.detectMultiScale(gray, 1.4, 6)
+                    
+                    # Draw rectangle around the faces and crop the faces
+                    for (x, y, w, h) in faces:
+                        faces = img[y:y + h, x:x + w]
+                    sr = cv2.dnn_superres.DnnSuperResImpl_create()
+                    path = 'FSRCNN_x4.pb'
+                    sr.readModel(path)
+                    sr.setModel("fsrcnn", 4)
+                    upscaled = sr.upsample(faces)
+                    cv2.imwrite(filename, upscaled)
+                    break
+                except :
+                    pass  
+                os.remove(filename)         
+        except IndexError:
+            print("jumlah foto: 0")
+    
+    return {"status": "success"}
