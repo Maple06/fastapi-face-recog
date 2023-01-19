@@ -131,7 +131,7 @@ def api(l: str = ""):
 
     return {"faceDetected": faceDetected, "confidence": confidence, "match-status": status["match-status"], "error-status": 1}
 
-@app.route("/update")
+@app.get("/update")
 def update():
     r = requests.get('https://web.waktoo.com/open-api/get-selfie', headers={'Accept': 'application/json'})
 
