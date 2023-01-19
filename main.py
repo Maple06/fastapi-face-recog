@@ -1,14 +1,13 @@
-from fastapi import FastAPI
+print("Importing libraries...")
+from fastapi import FastAPI, UploadFile, File, Form
 from time import strftime, gmtime
+from pydantic import BaseModel
 import face_recognition, os, shutil, math, requests, cv2, numpy as np, dlib
-
+print("Libraries imported!")
 
 app = FastAPI()
 
 status = {'faces': "No Face Detected", "confidence": "0", "match-status": False, "error-status": 1}
-
-takePhotoReq = False
-
 detector = dlib.get_frontal_face_detector()
 
 recentPicTaken = ""
@@ -40,20 +39,30 @@ def encode_faces():
         except IndexError:
             pass
 
+print("Encoding Faces...")
 encode_faces()
+print("Encoding Done!")
 
-@app.get('/')
-def api(l: str = ""):
-    picLink = l
+@app.post('/')
+def api(user_id : str = Form(...), file: UploadFile = File(...)):
+    if user_id == "":
+        return {"faceDetected": "No Face Detected", "confidence": "0%", "match-status": False, "error-status": 0, "error-message": "No user id provided"}
 
-    if picLink == None or picLink == "":
-        return {"faceDetected": "No Face Detected", "confidence": "0%", "match-status": False, "error-status": 0, "error-message": "No link argument found"}
-    response = requests.get(picLink, stream=True)
     timeNow = strftime("%d-%b-%y.%H-%M-%S", gmtime())
+    filenamesInImages = os.listdir("static/Images")
     filename = f"static/images/api-{timeNow}.png"
-    with open(filename, 'wb') as out_file:
-        shutil.copyfileobj(response.raw, out_file)
-    del response
+
+    count = 0
+    while filename.split("/")[-1] in filenamesInImages:
+        filename = f"static/images/api-{timeNow}-{count}.png"
+        count += 1
+
+    with open(filename, "wb") as f:
+        if file.filename.split(".")[-1].lower() not in ["jpg", "png", "jpeg", "heif"]:
+            return {"faceDetected": "No Face Detected", "confidence": "0%", "match-status": False, "error-status": 0, "error-message": "Filename not supported"}
+        shutil.copyfileobj(file.file, f)
+
+    IDs_in_dataset = [''.join(i.split(".").pop()) for i in os.listdir("static/faces/")]
 
     frame = cv2.imread(f"static/images/api-{timeNow}.png")
 
@@ -80,7 +89,7 @@ def api(l: str = ""):
         small_frame = cv2.resize(frame, (0, 0), fx=0.1, fy=0.1)
     elif frame.shape[0] <= 400 or frame.shape[1] <= 400 :
         small_frame = sr.upsample(frame)
-        small_frame = cv2.resize(small_frame, (0, 0), fx=0.5, fy=0.5)
+        small_frame = cv2.resize(small_frame, (0, 0), fx=0.4, fy=0.4)
     else :
         small_frame = frame
     
@@ -88,7 +97,8 @@ def api(l: str = ""):
     rgb_small_frame = small_frame[:, :, ::-1]
 
     if rgb_small_frame.shape[0] > 600 :
-        return {"faceDetected": faceDetected, "confidence": confidence, "match-status": status["match-status"], "error-status": 0}
+        os.remove(filename)
+        return {"faceDetected": status['faces'], "confidence": status["confidence"], "match-status": status["match-status"], "error-status": 0}
 
     # Find all the faces and face encodings in the current frame of video
     face_locations = face_recognition.face_locations(rgb_small_frame)
@@ -112,21 +122,22 @@ def api(l: str = ""):
         status["faces"] = name
         status["confidence"] = confidence
 
-        if picLink[:58] == "https://waktoo-selfie.obs.ap-southeast-3.myhuaweicloud.com" or picLink[:60] == "https:\/\/waktoo-selfie.obs.ap-southeast-3.myhuaweicloud.com":
-            checkedID = picLink.replace("\\", "").split("/")[-1].split("_")[0]
-            detectedFace = status["faces"].split(".")[0]
-            if checkedID == detectedFace:
-                status["match-status"] = True
-            else:
-                status["match-status"] = False
+        detectedFace = status["faces"].split(".")[0]
+        if user_id == detectedFace:
+            status["match-status"] = True
 
         face_names.append(f'{name} ({confidence})')
+
+    if status["faces"] == "Unknown" and user_id not in IDs_in_dataset:
+        os.remove(filename)
+        return {"faceDetected": "Face Detected", "confidence": "N/A", "match-status": False, "error-status": 1, "error-message": "User id not in dataset, but face is detected"}
 
     # Display the results
 
     faceDetected = status["faces"]
     confidence = status["confidence"]
 
+    os.remove(filename)
     return {"faceDetected": faceDetected, "confidence": confidence, "match-status": status["match-status"], "error-status": 1}
 
 @app.get("/update")
@@ -174,6 +185,6 @@ def update():
                     pass  
                 os.remove(filename)         
         except IndexError:
-            print("jumlah foto: 0")
+            pass
     
     return {"status": "success"}
