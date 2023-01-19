@@ -78,11 +78,9 @@ def api(l: str = ""):
     
     if frame.shape[0] >= 1000 or frame.shape[1] >= 1000:
         small_frame = cv2.resize(frame, (0, 0), fx=0.1, fy=0.1)
-        print(small_frame.shape)
     elif frame.shape[0] <= 400 or frame.shape[1] <= 400 :
         small_frame = sr.upsample(frame)
         small_frame = cv2.resize(small_frame, (0, 0), fx=0.5, fy=0.5)
-        print(small_frame.shape)
     else :
         small_frame = frame
     
