@@ -79,8 +79,16 @@ def update():
 
     print("Datasets updated!")
 
+todaysUserLen = 0
+
 def encode_faces():
-    global face_locations, face_encodings, face_names, known_face_encodings, known_face_names
+    global face_locations, face_encodings, face_names, known_face_encodings, known_face_names, todaysUserLen
+
+    r = requests.get('https://web.waktoo.com/open-api/get-selfie', headers={'Accept': 'application/json'})
+    response = r.json()
+    idPerusahaan = 1 # PT Kazee Digital Indonesia
+    todaysUserLen = len(response["data"][idPerusahaan-1]["user"])
+
     update()
     for image in os.listdir('static/faces'):
         face_image = face_recognition.load_image_file(f"static/faces/{image}")
@@ -91,9 +99,19 @@ def encode_faces():
         except IndexError:
             pass
 
-# print("Encoding Faces...")
-# encode_faces()
-# print("Encoding Done!")
+print("Encoding Faces...")
+encode_faces()
+print("Encoding Done!")
+
+usersLen = 0
+
+def getUsersLen():
+    global usersLen, todaysUserLen
+    if usersLen != todaysUserLen:
+        encode_faces()
+
+scheduler.add_job(getUsersLen, 'interval', seconds=1)
+scheduler.start()
 
 update()
 
