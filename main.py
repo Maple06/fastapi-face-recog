@@ -1,11 +1,13 @@
 print("Importing libraries...")
 from fastapi import FastAPI, UploadFile, File, Form
 from time import strftime, gmtime
-from pydantic import BaseModel
+from apscheduler.schedulers.background import BackgroundScheduler
 import face_recognition, os, shutil, math, requests, cv2, numpy as np, dlib
 print("Libraries imported!")
 
 app = FastAPI()
+
+scheduler = BackgroundScheduler()
 
 status = {'faces': "No Face Detected", "confidence": "0", "match-status": False, "error-status": 1}
 detector = dlib.get_frontal_face_detector()
@@ -28,8 +30,58 @@ face_names = []
 known_face_encodings = []
 known_face_names = []
 
+def update():
+    print("Updating datasets...")
+    r = requests.get('https://web.waktoo.com/open-api/get-selfie', headers={'Accept': 'application/json'})
+
+    response = r.json()
+    idPerusahaan = 1 # PT Kazee Digital Indonesia
+    response = response["data"][idPerusahaan-1]["user"]
+
+    for i in response:
+        count = 1
+        try:
+            for j in i["foto"]:
+                url = j["foto_absen"]
+
+                r = requests.get(url)
+
+                filename = f'static/faces/{i["user_id"]}.png'
+
+                with open(filename, 'wb') as f:
+                    f.write(r.content)         
+                try :
+                    img = cv2.imread(filename)
+                    # Convert into grayscale
+                    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                    
+                    # Load the cascade
+                    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+                    
+                    # Detect faces
+                    faces = face_cascade.detectMultiScale(gray, 1.4, 7)
+                    
+                    # Draw rectangle around the faces and crop the faces
+                    for (x, y, w, h) in faces:
+                        faces = img[y:y + h, x:x + w]
+                    sr = cv2.dnn_superres.DnnSuperResImpl_create()
+                    path = 'FSRCNN_x4.pb'
+                    sr.readModel(path)
+                    sr.setModel("fsrcnn", 4)
+                    upscaled = sr.upsample(faces)
+                    cv2.imwrite(filename, upscaled)
+                    break
+                except :
+                    pass  
+                os.remove(filename)         
+        except IndexError:
+            pass
+
+    print("Datasets updated!")
+
 def encode_faces():
     global face_locations, face_encodings, face_names, known_face_encodings, known_face_names
+    update()
     for image in os.listdir('static/faces'):
         face_image = face_recognition.load_image_file(f"static/faces/{image}")
         try:
@@ -39,9 +91,16 @@ def encode_faces():
         except IndexError:
             pass
 
-print("Encoding Faces...")
-encode_faces()
-print("Encoding Done!")
+# print("Encoding Faces...")
+# encode_faces()
+# print("Encoding Done!")
+
+update()
+
+print("Running daily dataset update and encoding...")
+scheduler.add_job(encode_faces, 'cron', day_of_week='mon-sun', hour=1, minute=00)
+scheduler.start()
+print("Daily dataset updated and encoded!")
 
 @app.post('/')
 def api(user_id : str = Form(...), file: UploadFile = File(...)):
@@ -139,52 +198,3 @@ def api(user_id : str = Form(...), file: UploadFile = File(...)):
 
     os.remove(filename)
     return {"faceDetected": faceDetected, "confidence": confidence, "match-status": status["match-status"], "error-status": 1}
-
-@app.get("/update")
-def update():
-    r = requests.get('https://web.waktoo.com/open-api/get-selfie', headers={'Accept': 'application/json'})
-
-    response = r.json()
-    idPerusahaan = 1 # PT Kazee Digital Indonesia
-    response = response["data"][idPerusahaan-1]["user"]
-
-    for i in response:
-        count = 1
-        try:
-            for j in i["foto"]:
-                url = j["foto_absen"]
-
-                r = requests.get(url)
-
-                filename = f'static/faces/{i["user_id"]}.png'
-
-                with open(filename, 'wb') as f:
-                    f.write(r.content)         
-                try :
-                    img = cv2.imread(filename)
-                    # Convert into grayscale
-                    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                    
-                    # Load the cascade
-                    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
-                    
-                    # Detect faces
-                    faces = face_cascade.detectMultiScale(gray, 1.4, 6)
-                    
-                    # Draw rectangle around the faces and crop the faces
-                    for (x, y, w, h) in faces:
-                        faces = img[y:y + h, x:x + w]
-                    sr = cv2.dnn_superres.DnnSuperResImpl_create()
-                    path = 'FSRCNN_x4.pb'
-                    sr.readModel(path)
-                    sr.setModel("fsrcnn", 4)
-                    upscaled = sr.upsample(faces)
-                    cv2.imwrite(filename, upscaled)
-                    break
-                except :
-                    pass  
-                os.remove(filename)         
-        except IndexError:
-            pass
-    
-    return {"status": "success"}
