@@ -107,6 +107,12 @@ usersLen = 0
 
 def getUsersLen():
     global usersLen, todaysUserLen
+
+    r = requests.get('https://web.waktoo.com/open-api/get-selfie', headers={'Accept': 'application/json'})
+    response = r.json()
+    idPerusahaan = 1 # PT Kazee Digital Indonesia
+    usersLen = len(response["data"][idPerusahaan-1]["user"])
+
     if usersLen != todaysUserLen:
         encode_faces()
 
