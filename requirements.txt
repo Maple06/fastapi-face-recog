@@ -1,0 +1,11 @@
+fastapi
+apscheduler
+fastapi_utils
+face_recognition
+opencv-python
+numpy
+requests
+dlib
+opencv-contrib-python
+python-multipart
+uvicorn
