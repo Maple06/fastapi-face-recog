@@ -1,4 +1,4 @@
-# Face Recognition Website using FastAPI, OpenCV, and face-recognition library.
+# Face Recognition API using FastAPI, OpenCV, and face-recognition library.
 
 ### Usage
 Build image on main folder, `docker build -t <image-name> .`. Wait for some minute or hour then create a container by running `docker run --name <container-name> -p 8000:8000 <image-name>`.
